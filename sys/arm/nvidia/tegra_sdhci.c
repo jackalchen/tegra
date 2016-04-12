@@ -36,6 +36,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/types.h>
 #include <sys/bus.h>
 #include <sys/callout.h>
+#include <sys/gpio.h>
 #include <sys/kernel.h>
 #include <sys/lock.h>
 #include <sys/malloc.h>
@@ -102,6 +103,8 @@ struct tegra_sdhci_softc {
 	struct resource *	mem_res;
 	struct resource *	irq_res;
 	void *			intr_cookie;
+	struct resource *	cd_irq_res;
+	void *			cd_intr_cookie;
 	u_int			quirks;	/* Chip specific quirks */
 	u_int			caps;	/* If we override SDHCI_CAPABILITIES */
 	uint32_t		max_clk; /* Max possible freq */
@@ -212,6 +215,14 @@ tegra_sdhci_intr(void *arg)
 
 	sdhci_generic_intr(&sc->slot);
 	RD4(sc, SDHCI_INT_STATUS);
+}
+
+static void
+tegra_sdhci_cd_intr(void *arg)
+{
+	struct tegra_sdhci_softc *sc = arg;
+
+	device_printf(sc->dev, "Got CD interrupt\n");
 }
 
 static int
@@ -373,6 +384,26 @@ tegra_sdhci_attach(device_t dev)
 	if (rv != 0) {
 		goto fail;
 	}
+	if (sc->gpio_cd != NULL) {
+		gpio_pin_setflags(sc->gpio_cd, GPIO_PIN_INPUT);
+		rid = 0;
+		sc->cd_irq_res = gpio_alloc_intr_resource(dev, &rid, RF_ACTIVE,
+		    sc->gpio_cd, GPIO_INTR_EDGE_BOTH);
+		if (!sc->cd_irq_res) {
+			device_printf(dev, "cannot allocate cd interrupt\n");
+			rv = ENXIO;
+			goto fail;
+		}
+
+		if (bus_setup_intr(dev, sc->cd_irq_res,
+		    INTR_TYPE_MISC | INTR_MPSAFE, NULL, tegra_sdhci_cd_intr,
+		    sc, &sc->cd_intr_cookie)) {
+			device_printf(dev,
+			    "cannot setup cd interrupt handler\n");
+			rv = ENXIO;
+			goto fail;
+		}
+	}
 
 	bus_generic_probe(dev);
 	bus_generic_attach(dev);
@@ -382,6 +413,11 @@ tegra_sdhci_attach(device_t dev)
 	return (0);
 
 fail:
+	if (sc->intr_cookie != NULL)
+		bus_teardown_intr(dev, sc->irq_res, sc->intr_cookie);
+	if (sc->cd_intr_cookie != NULL)
+		bus_teardown_intr(dev, sc->irq_res, sc->cd_intr_cookie);
+
 	if (sc->gpio_cd != NULL)
 		gpio_pin_release(sc->gpio_cd);
 	if (sc->gpio_wp != NULL)
@@ -392,8 +428,8 @@ fail:
 		clk_release(sc->clk);
 	if (sc->reset != NULL)
 		hwreset_release(sc->reset);
-	if (sc->intr_cookie != NULL)
-		bus_teardown_intr(dev, sc->irq_res, sc->intr_cookie);
+	if (sc->cd_irq_res != NULL)
+		bus_release_resource(dev, SYS_RES_IRQ, 0, sc->cd_irq_res);
 	if (sc->irq_res != NULL)
 		bus_release_resource(dev, SYS_RES_IRQ, 0, sc->irq_res);
 	if (sc->mem_res != NULL)
