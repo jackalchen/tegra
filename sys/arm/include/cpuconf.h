@@ -56,8 +56,7 @@
 			 defined(CPU_XSCALE_PXA2X0) +			\
 			 defined(CPU_FA526) +				\
 			 defined(CPU_XSCALE_IXP425)) +			\
-			 defined(CPU_CORTEXA8) +			\
-			 defined(CPU_CORTEXA_MP) +			\
+			 defined(CPU_CORTEXA) +				\
 			 defined(CPU_KRAIT) +				\
 			 defined(CPU_MV_PJ4B)
 
@@ -86,8 +85,7 @@
 #endif
 #endif
 
-#if defined(CPU_CORTEXA8) || defined(CPU_CORTEXA_MP) || \
-    defined(CPU_KRAIT) || defined(CPU_MV_PJ4B)
+#if defined(CPU_CORTEXA) || defined(CPU_KRAIT) || defined(CPU_MV_PJ4B)
 #define ARM_ARCH_7A	1
 #else
 #define ARM_ARCH_7A	0
@@ -157,8 +155,7 @@
 #define ARM_MMU_V6		0
 #endif
 
-#if defined(CPU_CORTEXA8) || defined(CPU_CORTEXA_MP) || \
-    defined(CPU_KRAIT) || defined(CPU_MV_PJ4B)
+#if defined(CPU_CORTEXA) || defined(CPU_KRAIT) || defined(CPU_MV_PJ4B)
 #define ARM_MMU_V7		1
 #else
 #define ARM_MMU_V7		0
